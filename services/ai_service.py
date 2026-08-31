@@ -12,7 +12,7 @@ def get_client(api_key=None):
     """
     Returns an initialized Gemini Client with the given API key or the environment variable.
     """
-    key = api_key or os.environ.get("GEMINI_API_KEY")
+    key = api_key or os.environ.get("AQ.Ab8RN6ILLY636LqsAtqr7jccaN4SErJVyFdyIaLvSXKqb0VqCg")
     if not key or key == "your_gemini_api_key_here":
         raise ValueError("Gemini API key is not configured. Please set GEMINI_API_KEY in your .env file.")
     return genai.Client(api_key=key)
