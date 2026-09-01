@@ -2,7 +2,6 @@ import os
 import time
 import smtplib
 from email.mime.text import MIMEText
-from email.utils import make_msgid, formatdate
 
 def send_email_campaign(subject, body, recipients, delay_seconds=1.0, max_retries=2):
     """
@@ -10,7 +9,7 @@ def send_email_campaign(subject, body, recipients, delay_seconds=1.0, max_retrie
     Reads SMTP credentials and host configuration from environment variables.
     """
     sender_email = os.environ.get("SMTP_EMAIL") or os.environ.get("pankaj7607038073@gmail.com")
-    sender_password = os.environ.get("SMTP_PASSWORD") or os.environ.get("fnzi inxr wdlb giln")
+    sender_password = os.environ.get("SMTP_PASSWORD") or os.environ.get("eaot uccf pswv ovzq")
     sender_name = os.environ.get("SMTP_SENDER_NAME", "MailPilot")
     smtp_server = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
     smtp_port = int(os.environ.get("SMTP_PORT", 587))
@@ -41,8 +40,6 @@ def send_email_campaign(subject, body, recipients, delay_seconds=1.0, max_retrie
             msg["From"] = f"{sender_name} <{sender_email}>"
             msg["To"] = recipient
             msg["Subject"] = subject
-            msg["Date"] = formatdate(localtime=True)
-            msg["Message-ID"] = make_msgid()
 
             attempt = 0
             sent = False
