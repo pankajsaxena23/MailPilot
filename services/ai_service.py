@@ -1,24 +1,27 @@
 import os
-from google import genai
+import requests
 
-# Active Gemini models supported by Google GenAI API
+# We define fallback models for the UI drop-down.
 FALLBACK_MODELS = [
-    "gemini-3.6-flash",
-    "gemini-3.5-flash",
+    "meta/llama-3.1-70b-instruct",
+    "google/gemma-2-27b-it",
+    "google/diffusiongemma-26b-a4b-it"
 ]
 
-def get_client(api_key: str = None):
+def get_nvidia_headers(api_key: str = None):
     """
-    Returns an initialized Gemini Client using the provided API key or environment variable.
+    Returns headers for Nvidia API. Uses the provided key, environment variable, 
+    or the hardcoded working key you provided.
     """
-    key = (api_key or os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6LGyMrZURjnw_m47QhFwbMhvSaJyR00sKCqBK4f68hVTw")).strip()
-    if not key or key == "your_gemini_api_key_here":
-        raise ValueError("Gemini API key is not configured. Please set GEMINI_API_KEY in your .env file or Settings.")
-    return genai.Client(api_key=key)
+    key = (api_key or os.environ.get("NVIDIA_API_KEY", "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")).strip()
+    return {
+        "Authorization": f"Bearer {key}",
+        "Accept": "application/json",
+    }
 
 def clean_ai_output(text: str) -> str:
     """
-    Cleans up markdown code fences, extra whitespace, or AI boilerplate from the response.
+    Cleans up markdown code fences from the response.
     """
     if not text:
         return ""
@@ -34,60 +37,43 @@ def clean_ai_output(text: str) -> str:
         
     return text
 
-def _execute_with_model_fallback(client, prompt: str, preferred_model: str = None) -> tuple[str, str]:
+def _execute_nvidia_api(prompt: str, preferred_model: str = None, api_key: str = None) -> tuple[str, str]:
     """
-    Executes generate_content with automatic fallback if the preferred model hits
-    rate limits (429), quota limits, or model availability issues.
-    Returns (generated_text, model_used).
+    Executes the prompt against the NVIDIA API.
     """
-    configured_model = preferred_model or os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
+    invoke_url = "https://integrate.api.nvidia.com/v1/chat/completions"
+    headers = get_nvidia_headers(api_key)
     
-    # Build candidate models list without duplicates
-    models_to_try = [configured_model]
-    for m in FALLBACK_MODELS:
-        if m not in models_to_try:
-            models_to_try.append(m)
+    # Use the model requested by the user
+    model_name = preferred_model or "google/diffusiongemma-26b-a4b-it"
+    
+    payload = {
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "model": model_name,
+        "max_tokens": 1024,
+        "temperature": 0.7,
+        "top_p": 0.95
+    }
+    
+    response = requests.post(invoke_url, headers=headers, json=payload)
+    if response.status_code == 200:
+        data = response.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        return clean_ai_output(content), model_name
+    else:
+        err_msg = response.text
+        raise RuntimeError(f"NVIDIA API Error {response.status_code}: {err_msg}")
 
-    last_error = None
-    for model_name in models_to_try:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-            )
-            text = getattr(response, "text", None)
-            if not text and hasattr(response, "candidates") and response.candidates:
-                content_obj = getattr(response.candidates[0], "content", None)
-                if content_obj:
-                    parts = getattr(content_obj, "parts", [])
-                    text = "".join([getattr(p, "text", "") for p in parts if getattr(p, "text", "")])
-
-            if text:
-                return clean_ai_output(text), model_name
-        except Exception as e:
-            err_str = str(e)
-            last_error = e
-            # If rate limited, quota exhausted, or model not found, try fallback model
-            if any(code in err_str for code in ["429", "RESOURCE_EXHAUSTED", "404", "NOT_FOUND", "503", "UNAVAILABLE"]):
-                continue
-            if any(code in err_str for code in ["API_KEY_INVALID", "PERMISSION_DENIED", "401", "403"]):
-                raise ValueError("Invalid Gemini API key. Please check your API key in Settings or .env file.")
-            raise RuntimeError(f"Error generating email with model {model_name}: {err_str}")
-
-    err_str = str(last_error) if last_error else "Unknown error"
-    if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-        raise RuntimeError("Gemini API quota reached for this key. Please wait a moment or update your API key in .env / Settings.")
-    if any(code in err_str for code in ["API_KEY_INVALID", "PERMISSION_DENIED", "401", "403"]):
-        raise ValueError("Invalid Gemini API key. Please check your API key in Settings or .env file.")
-    raise RuntimeError(f"Error generating email across attempted models: {err_str}")
 
 def generate_email(subject: str, tone: str = "Professional", additional_instructions: str = "", model: str = None, api_key: str = None) -> dict:
     """
-    Generates a high-quality email draft using Google Gemini AI.
-    Returns a dictionary with 'content' and 'model_used'.
+    Generates a high-quality email draft using the NVIDIA API.
     """
-    client = get_client(api_key=api_key)
-
     prompt = (
         f"You are MailPilot, an expert AI email assistant. Write a high-quality, ready-to-send email based on the following requirements:\n\n"
         f"Subject / Topic: {subject}\n"
@@ -99,12 +85,12 @@ def generate_email(subject: str, tone: str = "Professional", additional_instruct
     prompt += (
         "\nGuidelines:\n"
         "- The email must be concise, well-structured, polite, and persuasive according to the requested tone.\n"
-        "- Do not include placeholders like '[Your Name]', '[Sender Name]', or '[Company Name]' if avoidable; provide natural, complete phrasing or a clean universal sign-off (e.g. 'Best regards,').\n"
+        "- Do not include placeholders like '[Your Name]'; provide natural, complete phrasing or a clean universal sign-off (e.g. 'Best regards,').\n"
         "- Do NOT enclose the email in markdown code blocks (e.g., ```email).\n"
         "- Return only the email body (including greeting and sign-off)."
     )
 
-    content, model_used = _execute_with_model_fallback(client, prompt, preferred_model=model)
+    content, model_used = _execute_nvidia_api(prompt, preferred_model=model, api_key=api_key)
     return {
         "content": content,
         "model_used": model_used
@@ -112,10 +98,8 @@ def generate_email(subject: str, tone: str = "Professional", additional_instruct
 
 def ai_refine_email(content: str, instruction: str, tone: str = "Professional", model: str = None, api_key: str = None) -> dict:
     """
-    Refines, rewrites, shortens, expands, or fixes grammar for an existing email draft using Gemini AI.
+    Refines an existing email draft using the NVIDIA API.
     """
-    client = get_client(api_key=api_key)
-
     prompt = (
         f"You are MailPilot, an expert AI email editor. Refine and improve the following email according to the instruction:\n\n"
         f"Instruction: {instruction}\n"
@@ -129,7 +113,7 @@ def ai_refine_email(content: str, instruction: str, tone: str = "Professional", 
         "- Return only the refined email text."
     )
 
-    refined_content, model_used = _execute_with_model_fallback(client, prompt, preferred_model=model)
+    refined_content, model_used = _execute_nvidia_api(prompt, preferred_model=model, api_key=api_key)
     return {
         "content": refined_content,
         "model_used": model_used
@@ -137,12 +121,10 @@ def ai_refine_email(content: str, instruction: str, tone: str = "Professional", 
 
 def test_ai_connection(api_key: str = None, model: str = None) -> dict:
     """
-    Tests the Gemini API connection with a minimal prompt.
+    Tests the NVIDIA API connection with a minimal prompt.
     """
     try:
-        client = get_client(api_key=api_key)
-        test_model = model or os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
-        content, model_used = _execute_with_model_fallback(client, "Reply with 'OK' only.", preferred_model=test_model)
+        content, model_used = _execute_nvidia_api("Reply with 'OK' only.", preferred_model=model, api_key=api_key)
         return {
             "success": True,
             "message": f"Connected successfully using {model_used}",
