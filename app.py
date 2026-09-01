@@ -230,7 +230,7 @@ def get_settings():
     smtp_email = os.environ.get('SMTP_EMAIL') or os.environ.get('GMAIL_SENDER_EMAIL', '')
     smtp_pass = os.environ.get('SMTP_PASSWORD') or os.environ.get('GMAIL_APP_PASSWORD', '')
     gemini_key = os.environ.get('GEMINI_API_KEY', '')
-    current_model = os.environ.get('GEMINI_MODEL', 'gemini-3.6-flash')
+    current_model = os.environ.get('GEMINI_MODEL', 'gemini-3.7-flash')
 
     is_smtp_configured = bool(smtp_email and smtp_pass and smtp_email != 'your_email@gmail.com')
     is_api_configured = bool(gemini_key and gemini_key != 'your_gemini_api_key_here')

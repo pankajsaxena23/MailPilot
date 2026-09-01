@@ -3,6 +3,7 @@ from google import genai
 
 # Active Gemini models supported by Google GenAI API
 FALLBACK_MODELS = [
+    "gemini-3.7-flash",
     "gemini-3.6-flash",
     "gemini-3.5-flash",
 ]
@@ -40,7 +41,7 @@ def _execute_with_model_fallback(client, prompt: str, preferred_model: str = Non
     rate limits (429), quota limits, or model availability issues.
     Returns (generated_text, model_used).
     """
-    configured_model = preferred_model or os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
+    configured_model = preferred_model or os.environ.get("GEMINI_MODEL", "gemini-3.7-flash")
     
     # Build candidate models list without duplicates
     models_to_try = [configured_model]
@@ -141,7 +142,7 @@ def test_ai_connection(api_key: str = None, model: str = None) -> dict:
     """
     try:
         client = get_client(api_key=api_key)
-        test_model = model or os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
+        test_model = model or os.environ.get("GEMINI_MODEL", "gemini-3.7-flash")
         content, model_used = _execute_with_model_fallback(client, "Reply with 'OK' only.", preferred_model=test_model)
         return {
             "success": True,
