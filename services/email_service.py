@@ -2,6 +2,7 @@ import os
 import time
 import smtplib
 from email.mime.text import MIMEText
+from email.utils import make_msgid, formatdate
 
 def send_email_campaign(subject, body, recipients, delay_seconds=1.0, max_retries=2):
     """
@@ -40,6 +41,8 @@ def send_email_campaign(subject, body, recipients, delay_seconds=1.0, max_retrie
             msg["From"] = f"{sender_name} <{sender_email}>"
             msg["To"] = recipient
             msg["Subject"] = subject
+            msg["Date"] = formatdate(localtime=True)
+            msg["Message-ID"] = make_msgid()
 
             attempt = 0
             sent = False
