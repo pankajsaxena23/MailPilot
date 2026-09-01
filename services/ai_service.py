@@ -13,7 +13,7 @@ def get_nvidia_headers(api_key: str = None):
     Returns headers for Nvidia API. Uses the provided key, environment variable, 
     or the hardcoded working key you provided.
     """
-    key = (api_key or os.environ.get("NVIDIA_API_KEY", "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")).strip()
+    key = (api_key or os.environ.get("NVIDIA_API_KEY", "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")).strip()
     return {
         "Authorization": f"Bearer {key}",
         "Accept": "application/json",
