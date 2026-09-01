@@ -1,425 +1,137 @@
 import os
 import requests
-from dotenv import load_dotenv
 
-
-# ============================================================
-# LOAD ENVIRONMENT VARIABLES
-# ============================================================
-
-load_dotenv(override=True)
-
-
-# ============================================================
-# NVIDIA CONFIGURATION
-# ============================================================
-
-NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
-
-DEFAULT_MODEL = os.environ.get(
-    "NVIDIA_MODEL",
-    "meta/llama-3.1-8b-instruct"
-).strip()
-
-
-# Models that can be offered by the application.
-# You can change these according to the models available
-# in your NVIDIA API account.
+# We define fallback models for the UI drop-down.
 FALLBACK_MODELS = [
-    DEFAULT_MODEL,
-    "meta/llama-3.1-8b-instruct",
+    "meta/llama-3.1-70b-instruct",
+    "google/gemma-2-27b-it",
+    "google/diffusiongemma-26b-a4b-it"
 ]
 
-
-# Remove duplicates while preserving order
-FALLBACK_MODELS = list(dict.fromkeys(FALLBACK_MODELS))
-
-
-# ============================================================
-# GET NVIDIA API KEY
-# ============================================================
-
-def get_api_key(api_key=None):
+def get_nvidia_headers(api_key: str = None):
     """
-    Get NVIDIA API key.
-
-    Priority:
-    1. API key supplied by the request
-    2. NVIDIA_API_KEY from environment
+    Returns headers for Nvidia API. Uses the provided key, environment variable, 
+    or the hardcoded working key you provided.
     """
-
-    key = (
-        api_key
-        or os.environ.get("NVIDIA_API_KEY", "")
-    ).strip()
-
-    if not key:
-        raise ValueError(
-            "NVIDIA_API_KEY is not configured. "
-            "Add your NVIDIA API key to the .env file."
-        )
-
-    return key
-
-
-# ============================================================
-# GET MODEL
-# ============================================================
-
-def get_model(model=None):
-    """
-    Return requested NVIDIA model or configured default model.
-    """
-
-    selected_model = (
-        model
-        or os.environ.get(
-            "NVIDIA_MODEL",
-            DEFAULT_MODEL
-        )
-    ).strip()
-
-    if not selected_model:
-        selected_model = DEFAULT_MODEL
-
-    return selected_model
-
-
-# ============================================================
-# NVIDIA CHAT REQUEST
-# ============================================================
-
-def _nvidia_chat(
-    messages,
-    api_key=None,
-    model=None,
-    temperature=0.7,
-    max_tokens=1000,
-    timeout=60
-):
-    """
-    Send a chat-completion request to NVIDIA API.
-    """
-
-    key = get_api_key(api_key)
-    selected_model = get_model(model)
-
-    headers = {
+    key = (api_key or os.environ.get("NVIDIA_API_KEY", "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")).strip()
+    return {
         "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json",
         "Accept": "application/json",
     }
 
+def clean_ai_output(text: str) -> str:
+    """
+    Cleans up markdown code fences from the response.
+    """
+    if not text:
+        return ""
+    
+    text = text.strip()
+    for prefix in ["```email", "```markdown", "```text", "```html", "```"]:
+        if text.lower().startswith(prefix):
+            text = text[len(prefix):].lstrip()
+            break
+            
+    if text.endswith("```"):
+        text = text[:-3].rstrip()
+        
+    return text
+
+def _execute_nvidia_api(prompt: str, preferred_model: str = None, api_key: str = None) -> tuple[str, str]:
+    """
+    Executes the prompt against the NVIDIA API.
+    """
+    invoke_url = "https://integrate.api.nvidia.com/v1/chat/completions"
+    headers = get_nvidia_headers(api_key)
+    
+    # Use the model requested by the user
+    model_name = preferred_model or "google/diffusiongemma-26b-a4b-it"
+    
     payload = {
-        "model": selected_model,
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "model": model_name,
+        "max_tokens": 1024,
+        "temperature": 0.7,
+        "top_p": 0.95
     }
+    
+    response = requests.post(invoke_url, headers=headers, json=payload)
+    if response.status_code == 200:
+        data = response.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        return clean_ai_output(content), model_name
+    else:
+        err_msg = response.text
+        raise RuntimeError(f"NVIDIA API Error {response.status_code}: {err_msg}")
 
-    response = requests.post(
-        NVIDIA_API_URL,
-        headers=headers,
-        json=payload,
-        timeout=timeout
+
+def generate_email(subject: str, tone: str = "Professional", additional_instructions: str = "", model: str = None, api_key: str = None) -> dict:
+    """
+    Generates a high-quality email draft using the NVIDIA API.
+    """
+    prompt = (
+        f"You are MailPilot, an expert AI email assistant. Write a high-quality, ready-to-send email based on the following requirements:\n\n"
+        f"Subject / Topic: {subject}\n"
+        f"Tone: {tone}\n"
     )
-
-    # Raise HTTP errors
-    response.raise_for_status()
-
-    try:
-        result = response.json()
-    except ValueError:
-        raise RuntimeError(
-            "NVIDIA API returned an invalid JSON response."
-        )
-
-    # Validate response structure
-    choices = result.get("choices")
-
-    if not choices:
-        raise RuntimeError(
-            "NVIDIA API returned no choices."
-        )
-
-    message = choices[0].get("message", {})
-
-    content = message.get("content")
-
-    if content is None:
-        raise RuntimeError(
-            "NVIDIA API returned an empty response."
-        )
-
-    return {
-        "content": str(content).strip(),
-        "model_used": result.get(
-            "model",
-            selected_model
-        )
-    }
-
-
-# ============================================================
-# GENERATE EMAIL
-# ============================================================
-
-def generate_email(
-    subject,
-    tone="Professional",
-    additional_instructions="",
-    model=None,
-    api_key=None
-):
-    """
-    Generate a professional email using NVIDIA AI.
-    """
-
-    subject = str(subject or "").strip()
-    tone = str(tone or "Professional").strip()
-    additional_instructions = str(
-        additional_instructions or ""
-    ).strip()
-
-    if not subject:
-        raise ValueError(
-            "Subject or topic is required."
-        )
-
-    prompt = f"""
-Write a complete professional email based on the following information.
-
-Topic / Subject:
-{subject}
-
-Tone:
-{tone}
-"""
-
     if additional_instructions:
-        prompt += f"""
+        prompt += f"Specific Instructions & Context: {additional_instructions}\n"
 
-Additional instructions:
-{additional_instructions}
-"""
-
-    prompt += """
-
-Requirements:
-- Write only the email body.
-- Do not include analysis or explanations.
-- Do not use placeholder text such as [Name] unless necessary.
-- Keep the email natural and human-written.
-- Use a clear greeting.
-- Make the message concise but useful.
-- Use appropriate paragraphs.
-- End with a professional closing.
-"""
-
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are MailPilot, an AI email writing "
-                "assistant. Generate clear, natural, "
-                "professional emails."
-            )
-        },
-        {
-            "role": "user",
-            "content": prompt
-        }
-    ]
-
-    return _nvidia_chat(
-        messages=messages,
-        api_key=api_key,
-        model=model,
-        temperature=0.7,
-        max_tokens=1000
+    prompt += (
+        "\nGuidelines:\n"
+        "- The email must be concise, well-structured, polite, and persuasive according to the requested tone.\n"
+        "- Do not include placeholders like '[Your Name]'; provide natural, complete phrasing or a clean universal sign-off (e.g. 'Best regards,').\n"
+        "- Do NOT enclose the email in markdown code blocks (e.g., ```email).\n"
+        "- Return only the email body (including greeting and sign-off)."
     )
 
+    content, model_used = _execute_nvidia_api(prompt, preferred_model=model, api_key=api_key)
+    return {
+        "content": content,
+        "model_used": model_used
+    }
 
-# ============================================================
-# REFINE EMAIL
-# ============================================================
-
-def ai_refine_email(
-    content,
-    instruction,
-    tone="Professional",
-    model=None,
-    api_key=None
-):
+def ai_refine_email(content: str, instruction: str, tone: str = "Professional", model: str = None, api_key: str = None) -> dict:
     """
-    Refine an existing email using NVIDIA AI.
+    Refines an existing email draft using the NVIDIA API.
     """
-
-    content = str(content or "").strip()
-    instruction = str(instruction or "").strip()
-    tone = str(tone or "Professional").strip()
-
-    if not content:
-        raise ValueError(
-            "Email content is required."
-        )
-
-    if not instruction:
-        raise ValueError(
-            "Refinement instruction is required."
-        )
-
-    prompt = f"""
-Improve the following email according to the user's instruction.
-
-Current Email:
-{content}
-
-User Instruction:
-{instruction}
-
-Desired Tone:
-{tone}
-
-Requirements:
-- Preserve the original meaning.
-- Improve grammar and readability.
-- Make the writing natural and human.
-- Do not add unnecessary information.
-- Do not explain what you changed.
-- Return only the revised email.
-"""
-
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are MailPilot, an expert email "
-                "editing assistant."
-            )
-        },
-        {
-            "role": "user",
-            "content": prompt
-        }
-    ]
-
-    return _nvidia_chat(
-        messages=messages,
-        api_key=api_key,
-        model=model,
-        temperature=0.5,
-        max_tokens=1200
+    prompt = (
+        f"You are MailPilot, an expert AI email editor. Refine and improve the following email according to the instruction:\n\n"
+        f"Instruction: {instruction}\n"
+        f"Desired Tone: {tone}\n\n"
+        f"--- Original Email ---\n"
+        f"{content}\n"
+        f"----------------------\n\n"
+        f"Requirements:\n"
+        f"- Apply the requested changes while maintaining a professional and natural email structure.\n"
+        "- Do NOT wrap the result in code blocks.\n"
+        "- Return only the refined email text."
     )
 
+    refined_content, model_used = _execute_nvidia_api(prompt, preferred_model=model, api_key=api_key)
+    return {
+        "content": refined_content,
+        "model_used": model_used
+    }
 
-# ============================================================
-# TEST NVIDIA AI CONNECTION
-# ============================================================
-
-def test_ai_connection(
-    api_key=None,
-    model=None
-):
+def test_ai_connection(api_key: str = None, model: str = None) -> dict:
     """
-    Test whether NVIDIA AI is accessible.
+    Tests the NVIDIA API connection with a minimal prompt.
     """
-
     try:
-
-        result = _nvidia_chat(
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a connection testing "
-                        "assistant."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": "Reply with exactly: OK"
-                }
-            ],
-            api_key=api_key,
-            model=model,
-            temperature=0,
-            max_tokens=10,
-            timeout=30
-        )
-
+        content, model_used = _execute_nvidia_api("Reply with 'OK' only.", preferred_model=model, api_key=api_key)
         return {
             "success": True,
-            "message": "NVIDIA AI connection successful.",
-            "model_used": result.get(
-                "model_used",
-                get_model(model)
-            )
+            "message": f"Connected successfully using {model_used}",
+            "model_used": model_used
         }
-
-    except requests.exceptions.HTTPError as e:
-
-        response_text = ""
-
-        if e.response is not None:
-            try:
-                response_text = e.response.text[:500]
-            except Exception:
-                response_text = ""
-
-        return {
-            "success": False,
-            "message": (
-                "NVIDIA AI request failed."
-            ),
-            "error": response_text
-            or str(e)
-        }
-
-    except requests.exceptions.Timeout:
-
-        return {
-            "success": False,
-            "message": "NVIDIA AI request timed out.",
-            "error": "Request timeout."
-        }
-
-    except requests.exceptions.ConnectionError:
-
-        return {
-            "success": False,
-            "message": (
-                "Could not connect to NVIDIA AI."
-            ),
-            "error": "Connection error."
-        }
-
     except Exception as e:
-
         return {
             "success": False,
-            "message": (
-                "NVIDIA AI connection test failed."
-            ),
-            "error": str(e)
+            "message": str(e)
         }
-
-
-# ============================================================
-# SIMPLE HEALTH CHECK
-# ============================================================
-
-def is_ai_configured():
-    """
-    Return True if an NVIDIA API key is configured.
-    """
-
-    key = os.environ.get(
-        "NVIDIA_API_KEY",
-        ""
-    ).strip()
-
-    return bool(
-        key
-        and key != "your_nvidia_api_key_here"
-    )
