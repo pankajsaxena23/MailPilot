@@ -7,7 +7,7 @@ from models import EmailCampaign, Recipient, CampaignRecipient
 from services.ai_service import generate_email, ai_refine_email, test_ai_connection, FALLBACK_MODELS
 from services.email_service import send_email_campaign
 
-load_dotenv()
+load_dotenv(override=True)
 
 app = Flask(__name__)
 init_db(app)
@@ -41,12 +41,13 @@ def generate():
     tone = data.get('tone', 'Professional')
     instructions = data.get('instructions', '').strip()
     model = data.get('model')
+    api_key = data.get('api_key')
 
     if not subject:
         return jsonify({'error': 'Subject or topic is required'}), 400
 
     try:
-        result = generate_email(subject=subject, tone=tone, additional_instructions=instructions, model=model)
+        result = generate_email(subject=subject, tone=tone, additional_instructions=instructions, model=model, api_key=api_key)
         return jsonify({
             'subject': subject,
             'content': result['content'],
@@ -63,6 +64,7 @@ def refine():
     instruction = data.get('instruction', '').strip()
     tone = data.get('tone', 'Professional')
     model = data.get('model')
+    api_key = data.get('api_key')
 
     if not content:
         return jsonify({'error': 'Email content is required to refine'}), 400
@@ -70,7 +72,7 @@ def refine():
         return jsonify({'error': 'Instruction is required'}), 400
 
     try:
-        result = ai_refine_email(content=content, instruction=instruction, tone=tone, model=model)
+        result = ai_refine_email(content=content, instruction=instruction, tone=tone, model=model, api_key=api_key)
         return jsonify({
             'content': result['content'],
             'model_used': result.get('model_used', 'Gemini')
@@ -228,7 +230,7 @@ def get_settings():
     smtp_email = os.environ.get('SMTP_EMAIL') or os.environ.get('GMAIL_SENDER_EMAIL', '')
     smtp_pass = os.environ.get('SMTP_PASSWORD') or os.environ.get('GMAIL_APP_PASSWORD', '')
     gemini_key = os.environ.get('GEMINI_API_KEY', '')
-    current_model = os.environ.get('GEMINI_MODEL', 'gemini-3.5-flash')
+    current_model = os.environ.get('GEMINI_MODEL', 'gemini-3.6-flash')
 
     is_smtp_configured = bool(smtp_email and smtp_pass and smtp_email != 'your_email@gmail.com')
     is_api_configured = bool(gemini_key and gemini_key != 'your_gemini_api_key_here')
