@@ -8,8 +8,8 @@ def send_email_campaign(subject, body, recipients, delay_seconds=1.0, max_retrie
     Sends an email campaign to a list of recipients via SMTP (e.g. Gmail).
     Reads SMTP credentials and host configuration from environment variables.
     """
-    sender_email = os.environ.get("pankaj7607038073@gmail.com")
-    sender_password =  os.environ.get("ufdp pukw pptv rgen")
+    sender_email = os.environ.get("SMTP_EMAIL", "pankaj7607038073@gmail.com")
+    sender_password = os.environ.get("SMTP_PASSWORD", "eaot uccf pswv ovzq")
     sender_name = os.environ.get("SMTP_SENDER_NAME", "MailPilot")
     smtp_server = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
     smtp_port = int(os.environ.get("SMTP_PORT", 587))
