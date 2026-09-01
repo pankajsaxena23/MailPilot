@@ -9,7 +9,7 @@ def send_email_campaign(subject, body, recipients, delay_seconds=1.0, max_retrie
     Reads SMTP credentials and host configuration from environment variables.
     """
     sender_email = os.environ.get("SMTP_EMAIL") or os.environ.get("pankaj7607038072@gmail.com")
-    sender_password = os.environ.get("SMTP_PASSWORD") or os.environ.get("eaotuccfpswvovzq")
+    sender_password = os.environ.get("SMTP_PASSWORD") or os.environ.get("fnzi inxr wdlb giln")
     sender_name = os.environ.get("SMTP_SENDER_NAME", "MailPilot")
     smtp_server = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
     smtp_port = int(os.environ.get("SMTP_PORT", 587))
