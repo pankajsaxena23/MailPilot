@@ -229,11 +229,11 @@ def delete_recipient(recipient_id):
 def get_settings():
     smtp_email = os.environ.get('SMTP_EMAIL') or os.environ.get('GMAIL_SENDER_EMAIL', '')
     smtp_pass = os.environ.get('SMTP_PASSWORD') or os.environ.get('GMAIL_APP_PASSWORD', '')
-    gemini_key = os.environ.get('GEMINI_API_KEY', '')
-    current_model = os.environ.get('GEMINI_MODEL', 'gemini-3.6-flash')
+    nvidia_key = os.environ.get('NVIDIA_API_KEY', '')
+    current_model = os.environ.get('NVIDIA_MODEL', FALLBACK_MODELS[0] if FALLBACK_MODELS else '')
 
     is_smtp_configured = bool(smtp_email and smtp_pass and smtp_email != 'your_email@gmail.com')
-    is_api_configured = bool(gemini_key and gemini_key != 'your_gemini_api_key_here')
+    is_api_configured = bool(nvidia_key and nvidia_key != 'your_gemini_api_key_here')
 
     return jsonify({
         'email': smtp_email if is_smtp_configured else 'Not configured',
@@ -242,7 +242,6 @@ def get_settings():
         'current_model': current_model,
         'available_models': FALLBACK_MODELS
     })
-
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 1212))
     debug = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 't')
