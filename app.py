@@ -244,7 +244,7 @@ def get_settings():
     })
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 1212))
+    port = int(os.environ.get('PORT', 4000))
     debug = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 't')
     print(f"Starting MailPilot on http://127.0.0.1:{port} (debug={debug})")
     app.run(debug=debug, port=port)
