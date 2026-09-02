@@ -242,6 +242,7 @@ def get_settings():
         'current_model': current_model,
         'available_models': FALLBACK_MODELS
     })
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 1212))
     debug = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 't')
